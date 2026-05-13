@@ -102,6 +102,9 @@ const RagConfigModal = ({
   if (template.key === 'ragflow_chat') {
     return <RAGFlowChat open={open} onCancel={onCancel} onSave={onSave} initialValues={editValue} />;
   }
+  if (template.key === 'lightrag') {
+    return <CustomRAG open={open} onCancel={onCancel} onSave={onSave} initialValues={editValue} />;
+  }
   // 其他RAG模板可在此扩展
   return null;
 };
