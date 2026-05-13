@@ -57,6 +57,22 @@ export const RAG_TEMPLATES = [
     }
   },
   {
+    key: 'lightrag',
+    name: 'LightRAG',
+    desc: '基于图结构的轻量级 RAG 系统',
+    logo: '/llm_logo/lightrag_logo.png',
+    defaultConfig: {
+      name: 'LightRAG',
+      url: '',
+      type: 'lightrag',
+      requestHeaders: '{"Content-Type": "application/json"}',
+      requestTemplate: '{"query": "{{question}}", "mode": "mix", "enable_rerank": true, "stream": false, "include_references": true}',
+      responsePath: 'response',
+      streamEventField: '',
+      streamEventValue: '',
+    }
+  },
+  {
     key: 'ragflow_chat',
     name: 'RAGFlow-Chat',
     desc: '支持流式输出的OpenAI兼容RAG对话系统',
