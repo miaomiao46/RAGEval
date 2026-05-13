@@ -436,16 +436,42 @@ export class RAGRequestService {
   }
 
   /**
-   * 处理非流式响应
+   * 处理非流式响应（兼容单 JSON、NDJSON、以及 Content-Type 非 SSE 的流式响应）
    */
   private async* handleNonStreamResponse(response: Response, config: RAGConfig) {
-    const data = await response.json();
-    const result = extractFromPath(data, config.responsePath || '');
-    if (result) {
-      yield result;
-    } else {
-      throw new Error('响应数据格式无效');
+    const text = await response.text();
+
+    // 先尝试解析为单个 JSON
+    try {
+      const data = JSON.parse(text);
+      const result = extractFromPath(data, config.responsePath || '');
+      if (result) {
+        yield result;
+        return;
+      }
+    } catch {}
+
+    // 回退：逐行解析，兼容 NDJSON 和 SSE（data: {...}）两种格式
+    const lines = text.split('\n');
+    let found = false;
+    for (const line of lines) {
+      let jsonStr = line.trim();
+      if (!jsonStr || jsonStr === '[DONE]') continue;
+      if (jsonStr.startsWith('data: ')) jsonStr = jsonStr.slice(6).trim();
+      if (!jsonStr.startsWith('{')) continue;
+      try {
+        const obj = JSON.parse(jsonStr);
+        // 有 streamEventField 时过滤事件类型
+        if (
+          config.streamEventField && config.streamEventValue &&
+          obj[config.streamEventField] !== config.streamEventValue
+        ) continue;
+        const chunk = extractFromPath(obj, config.responsePath || '');
+        if (chunk) { yield chunk; found = true; }
+      } catch {}
     }
+
+    if (!found) throw new Error('响应数据格式无效');
   }
 
   /**

@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/rag-evaluation-backend"
 FRONTEND_DIR="$SCRIPT_DIR/rag-evaluation-frontend"
-VENV_DIR="$SCRIPT_DIR/.venv"
+VENV_DIR="$BACKEND_DIR/.venv"
 
 BACKEND_PID_FILE="$SCRIPT_DIR/.backend.pid"
 FRONTEND_PID_FILE="$SCRIPT_DIR/.frontend.pid"

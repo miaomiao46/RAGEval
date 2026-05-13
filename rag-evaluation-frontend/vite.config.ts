@@ -6,6 +6,8 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0',
+    port: 3000,
     proxy: {
       // 将所有 /api 开头的请求代理到后端服务器
       '/api': {
