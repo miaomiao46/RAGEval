@@ -272,6 +272,7 @@ export class RAGRequestService {
           yield* this.streamDifyFlow(config as any, question);
           break;
         case 'custom':
+        case 'lightrag':
           yield* this.streamCustomRAG(config, question);
           break;
         default:
@@ -642,6 +643,7 @@ export class RAGRequestService {
           }
           break;
         case 'custom':
+        case 'lightrag':
           for await (const chunk of this.streamCustomRAG(config, testQuestion)) {
             content += chunk;
             if (content.length > 10) break;
