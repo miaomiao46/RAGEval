@@ -279,13 +279,21 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
   const [exportLoading, setExportLoading] = useState(false);
 
   const fetchAllQAPairs = async () => {
-    if (!testId) return;
+    if (!testId) return [];
     setExportLoading(true);
     try {
-      const res = await performanceService.fetchTestDetail(testId, 1, 9999);
-      const items = (res as any)?.items || [];
-      setAllQAPairs(items);
-      return items;
+      const PAGE_SIZE = 100;
+      let page = 1;
+      let all: any[] = [];
+      while (true) {
+        const res = await performanceService.fetchTestDetail(testId, page, PAGE_SIZE);
+        const items = (res as any)?.items || [];
+        all = all.concat(items);
+        if (items.length < PAGE_SIZE) break;
+        page++;
+      }
+      setAllQAPairs(all);
+      return all;
     } catch {
       message.error('获取全量问答对失败');
       return [];
@@ -300,8 +308,8 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
     '回答': item.answer || '',
     '首次响应时间(秒)': item.first_response_time != null ? item.first_response_time.toFixed(3) : '',
     '总响应时间(秒)': item.total_response_time != null ? item.total_response_time.toFixed(3) : '',
-    '字符数': item.character_count || '',
-    '状态': item.success === false ? '失败' : '成功',
+    '字符数': item.answer ? item.answer.length : 0,
+    '状态': (item.answer && item.answer.trim()) ? '成功' : '失败',
   }));
 
   // 过滤问答对

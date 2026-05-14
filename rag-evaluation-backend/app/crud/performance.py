@@ -103,6 +103,7 @@ def get_qa_pairs(
             "total_response_time": row.total_response_time,
             "first_response_time": row.first_response_time,
             "sequence_number": row.sequence_number if row.sequence_number is not None else i + 1 + skip,
+            "success": bool(row.answer and row.answer.strip()),
         })
 
     page = skip // limit + 1 if limit > 0 else 1
