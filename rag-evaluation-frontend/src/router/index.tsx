@@ -11,6 +11,7 @@ import SelectDatasetsPage from '../pages/Projects/SelectDatasets';
 import MainLayout from '../components/Layout/MainLayout';
 import { authService } from '../services/auth.service';
 import ProjectDetailPage from '../pages/Projects/ProjectDetail';
+import ProjectReportsPage from '../pages/Projects/Reports';
 import Settings from '../pages/Settings';
 
 // 管理员页面
@@ -95,6 +96,14 @@ const AppRouter = () => {
           element={
             <ProtectedRoute>
               <ProjectDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/projects/:id/reports"
+          element={
+            <ProtectedRoute>
+              <ProjectReportsPage />
             </ProtectedRoute>
           }
         />

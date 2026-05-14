@@ -6,8 +6,9 @@ import {
 import {
   CheckCircleOutlined, CloseCircleOutlined,
   SyncOutlined, FieldTimeOutlined, RocketOutlined,
-  FileTextOutlined, ExperimentOutlined, DatabaseOutlined, ApiOutlined
+  FileTextOutlined, ExperimentOutlined, DatabaseOutlined, ApiOutlined, DownloadOutlined
 } from '@ant-design/icons';
+import { CSVLink } from 'react-csv';
 import { TimeAgo } from '../../../components/common/TimeAgo';
 import styles from './PerformanceTests.module.css';
 import { performanceService } from '@services/performance/performance.service';
@@ -250,6 +251,59 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
     }
   };
 
+  // 生成摘要 CSV 数据
+  const buildSummaryCSV = () => {
+    if (!testData) return [];
+    const m = testData.summary_metrics || {};
+    return [{
+      '测试名称': testData.name,
+      '版本': testData.version || '',
+      '状态': testData.status,
+      '并发数': testData.concurrency,
+      '总问题数': testData.total_questions,
+      '成功数': testData.success_questions,
+      '失败数': testData.failed_questions,
+      '成功率': m.success_rate ? `${(m.success_rate * 100).toFixed(2)}%` : '',
+      '测试时长(秒)': m.test_duration_seconds || '',
+      '首次响应均值(秒)': m.response_time?.first_token_time?.avg?.toFixed(3) || '',
+      '首次响应P95(秒)': m.response_time?.first_token_time?.p95?.toFixed(3) || '',
+      '总响应均值(秒)': m.response_time?.total_time?.avg?.toFixed(3) || '',
+      '总响应P95(秒)': m.response_time?.total_time?.p95?.toFixed(3) || '',
+      '每秒请求数': m.throughput?.requests_per_second?.toFixed(3) || '',
+      '每秒字符数': m.throughput?.chars_per_second?.toFixed(3) || '',
+    }];
+  };
+
+  // 生成问答对 CSV 数据（全量，需先点击触发异步加载）
+  const [allQAPairs, setAllQAPairs] = useState<any[]>([]);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  const fetchAllQAPairs = async () => {
+    if (!testId) return;
+    setExportLoading(true);
+    try {
+      const res = await performanceService.fetchTestDetail(testId, 1, 9999);
+      const items = (res as any)?.items || [];
+      setAllQAPairs(items);
+      return items;
+    } catch {
+      message.error('获取全量问答对失败');
+      return [];
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const buildQACSV = (items: any[]) => items.map((item, idx) => ({
+    '序号': item.sequence_number || idx + 1,
+    '问题': item.question_content || '',
+    '回答': item.answer || '',
+    '首次响应时间(秒)': item.first_response_time != null ? item.first_response_time.toFixed(3) : '',
+    '总响应时间(秒)': item.total_response_time != null ? item.total_response_time.toFixed(3) : '',
+    '字符数': item.character_count || '',
+    '状态': item.success === false ? '失败' : '成功',
+  }));
+
   // 过滤问答对
   const filteredQAPairs = qaPairs.filter(item => {
     // 成功状态过滤
@@ -435,7 +489,38 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
               <Divider orientation="left">问答对列表</Divider>
 
               <div className={styles.qaFilter}>
-                <Space>
+                <Space style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                  <Space>
+                    <CSVLink
+                      data={buildSummaryCSV()}
+                      filename={`性能测试摘要_${testData.name}.csv`}
+                      enclosingCharacter=""
+                    >
+                      <Button icon={<DownloadOutlined />} size="small">导出测试摘要</Button>
+                    </CSVLink>
+                    <Button
+                      icon={<DownloadOutlined />}
+                      size="small"
+                      loading={exportLoading}
+                      onClick={async () => {
+                        const items = await fetchAllQAPairs();
+                        if (items.length === 0) return;
+                        const csv = buildQACSV(items);
+                        const header = Object.keys(csv[0]).join(',');
+                        const rows = csv.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+                        const blob = new Blob(['﻿' + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `问答对列表_${testData.name}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      导出全量问答对
+                    </Button>
+                  </Space>
+                  <Space>
                   <Input.Search
                     placeholder="搜索问题或回答"
                     allowClear
@@ -451,6 +536,7 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
                     <Select.Option value={true}>成功</Select.Option>
                     <Select.Option value={false}>失败</Select.Option>
                   </Select>
+                  </Space>
                 </Space>
               </div>
 
