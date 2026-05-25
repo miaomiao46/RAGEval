@@ -8,7 +8,7 @@ import {
   PlusOutlined, SearchOutlined, SettingOutlined,
   EllipsisOutlined, ExclamationCircleOutlined,
   EyeOutlined, LockOutlined, EditOutlined, DeleteOutlined,
-  BookOutlined, TagOutlined, QuestionOutlined
+  BookOutlined, TagOutlined, QuestionOutlined, ThunderboltOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { Dataset } from '../../types/dataset';
@@ -172,6 +172,11 @@ const DatasetsPage: React.FC = () => {
             <Title level={5} ellipsis={{ rows: 1 }}>{dataset.name}</Title>
             <div className={styles.cardMeta}>
               <Text type="secondary">{`${dataset.question_count}个问题`}</Text>
+              {dataset.dataset_type === 'advanced' ? (
+                <Tag color="orange" icon={<ThunderboltOutlined />}>高级检索</Tag>
+              ) : (
+                <Tag color="blue" icon={<SearchOutlined />}>普通检索</Tag>
+              )}
               {dataset.is_public ? (
                 <Tag color="green" icon={<EyeOutlined />}>公开</Tag>
               ) : (

@@ -1,3 +1,18 @@
+/**
+ * 数据集类型定义
+ *
+ * standard - 普通检索数据集
+ *   以直接事实检索为主，问题答案可从单一文本段落中直接找到。
+ *   难度分布以 easy/medium 为主，问题类型以事实型(factoid)、概念型(conceptual)为主。
+ *   用途：测试 RAG 系统基础检索准确性。
+ *
+ * advanced - 高级检索数据集
+ *   包含需要推理、归纳或跨文档整合的问题，答案无法直接从单一片段获取。
+ *   难度分布以 medium/hard 为主，问题类型包含推理型(reasoning)、归纳型(inferential)、比较型(comparative)。
+ *   用途：测试 RAG 系统的深度理解、多跳检索和推理能力。
+ */
+export type DatasetType = 'standard' | 'advanced';
+
 export interface Dataset {
   id: string;
   user_id: string;
@@ -6,6 +21,8 @@ export interface Dataset {
   is_public: boolean;
   tags: string[];
   dataset_metadata: Record<string, any>;
+  /** 数据集类型: standard=普通检索, advanced=高级检索(含推理/归纳) */
+  dataset_type: DatasetType;
   question_count: number;
   created_at: string;
   updated_at: string;
@@ -38,6 +55,7 @@ export interface CreateDatasetRequest {
   is_public: boolean;
   tags?: string[];
   dataset_metadata?: Record<string, any>;
+  dataset_type?: DatasetType;
 }
 
 export interface UpdateDatasetRequest {
@@ -46,6 +64,7 @@ export interface UpdateDatasetRequest {
   is_public?: boolean;
   tags?: string[];
   dataset_metadata?: Record<string, any>;
+  dataset_type?: DatasetType;
 }
 
 export interface DatasetListParams {

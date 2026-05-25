@@ -567,6 +567,14 @@ const DatasetDetailPage: React.FC = () => {
               form={form}
               onAddQuestion={handleAddQuestion}
               onSearch={handleSearch}
+              onDifficultyFilterChange={(val) => {
+                setDifficultyFilter(val);
+                setCurrentPage(1);
+              }}
+              onCategoryFilterChange={(val) => {
+                setCategoryFilter(val);
+                setCurrentPage(1);
+              }}
               onSelectChange={handleSelectChange}
               onBatchDelete={handleBatchDelete}
               onEdit={edit}
@@ -591,6 +599,7 @@ const DatasetDetailPage: React.FC = () => {
             {dataset && id && (
               <QuestionGenerationContent
                 datasetId={id}
+                datasetType={dataset.dataset_type}
                 onGenerationComplete={() => {
                   fetchQuestions(id, {
                     page: currentPage,

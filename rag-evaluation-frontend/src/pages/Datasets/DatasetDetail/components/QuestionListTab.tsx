@@ -1,12 +1,40 @@
 import React, { useState } from 'react';
 import {
   Button, Table, Space, Input, Form, Tag, Tooltip,
-  Popconfirm, Empty, message, Card, Tabs
+  Popconfirm, Empty, message, Card, Tabs, Select
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined,
-  QuestionOutlined
+  QuestionOutlined, FilterOutlined
 } from '@ant-design/icons';
+
+// ─── 难度显示配置（RAG 检索难度定义）───────────────────────────
+// easy:   单一文本片段直接检索，无需推理
+// medium: 整合同一文档 2-3 个事实，或简单概念解释
+// hard:   跨段落信息整合 / 推理 / 归纳，文本中无直接陈述
+const DIFFICULTY_CONFIG: Record<string, { label: string; color: string; tooltip: string }> = {
+  easy:   { label: '简单', color: 'success',   tooltip: '答案可从单一文本片段直接找到，无需推理' },
+  medium: { label: '中等', color: 'warning',   tooltip: '需整合同一文档中 2-3 个相关事实，或进行简单解释' },
+  hard:   { label: '困难', color: 'error',     tooltip: '需跨段落整合信息、推理或归纳，文本中无直接陈述' },
+};
+
+// ─── 问题类别显示配置 ─────────────────────────────────────────
+// 普通检索类型
+// factoid:     事实型 - 直接陈述的事实
+// conceptual:  概念型 - 解释概念/定义
+// procedural:  程序型 - 操作步骤/流程
+// 高级检索类型
+// reasoning:   推理型 - 需要因果/条件推断
+// inferential: 归纳型 - 跨段落归纳规律
+// comparative: 比较型 - 对比不同信息/观点
+const CATEGORY_CONFIG: Record<string, { label: string; color: string; level: 'standard' | 'advanced' }> = {
+  factoid:     { label: '事实型',  color: 'blue',    level: 'standard' },
+  conceptual:  { label: '概念型',  color: 'cyan',    level: 'standard' },
+  procedural:  { label: '程序型',  color: 'geekblue', level: 'standard' },
+  reasoning:   { label: '推理型',  color: 'orange',  level: 'advanced' },
+  inferential: { label: '归纳型',  color: 'volcano', level: 'advanced' },
+  comparative: { label: '比较型',  color: 'purple',  level: 'advanced' },
+};
 
 import { Question } from '../../../../types/dataset';
 import styles from '../DatasetDetail.module.css';
@@ -42,6 +70,8 @@ interface QuestionListTabProps {
   form: any;
   onAddQuestion: () => void;
   onSearch: (value: string) => void;
+  onDifficultyFilterChange?: (value: string | undefined) => void;
+  onCategoryFilterChange?: (value: string | undefined) => void;
   onSelectChange: (selectedRowKeys: React.Key[]) => void;
   onBatchDelete: () => void;
   onEdit: (record: Question) => void;
@@ -71,6 +101,8 @@ const QuestionListTab: React.FC<QuestionListTabProps> = ({
   form,
   onAddQuestion,
   onSearch,
+  onDifficultyFilterChange,
+  onCategoryFilterChange,
   onSelectChange,
   onBatchDelete,
   onEdit,
@@ -310,29 +342,30 @@ const QuestionListTab: React.FC<QuestionListTabProps> = ({
       title: '难度',
       dataIndex: 'difficulty',
       key: 'difficulty',
-      width: 100,
-      render: (text) => {
-        const difficultyMap = {
-          'easy': '简单',
-          'medium': '中等',
-          'hard': '困难'
-        };
-        return difficultyMap[text] || text;
+      width: 90,
+      render: (text: string) => {
+        const cfg = DIFFICULTY_CONFIG[text];
+        if (cfg) {
+          return (
+            <Tooltip title={cfg.tooltip}>
+              <Tag color={cfg.color}>{cfg.label}</Tag>
+            </Tooltip>
+          );
+        }
+        return <Tag>{text || '-'}</Tag>;
       }
     },
     {
-      title: '分类',
+      title: '类别',
       dataIndex: 'category',
       key: 'category',
       width: 100,
-      render: (text) => {
-        const categoryMap = {
-          'factoid': '事实型',
-          'conceptual': '概念型',
-          'procedural': '程序型',
-          'comparative': '比较型'
-        };
-        return categoryMap[text] || text;
+      render: (text: string) => {
+        const cfg = CATEGORY_CONFIG[text];
+        if (cfg) {
+          return <Tag color={cfg.color}>{cfg.label}</Tag>;
+        }
+        return <Tag>{text || '-'}</Tag>;
       }
     },
     {
@@ -401,11 +434,38 @@ const QuestionListTab: React.FC<QuestionListTabProps> = ({
           )}
         </div>
         <div className={styles.tableFilters}>
+          <Select
+            allowClear
+            placeholder="难度筛选"
+            style={{ width: 110 }}
+            value={difficultyFilter}
+            onChange={(val) => onDifficultyFilterChange?.(val)}
+            options={[
+              { label: <Tag color="success">简单</Tag>, value: 'easy' },
+              { label: <Tag color="warning">中等</Tag>, value: 'medium' },
+              { label: <Tag color="error">困难</Tag>, value: 'hard' },
+            ]}
+          />
+          <Select
+            allowClear
+            placeholder="类别筛选"
+            style={{ width: 120 }}
+            value={categoryFilter}
+            onChange={(val) => onCategoryFilterChange?.(val)}
+            options={[
+              { label: <Tag color="blue">事实型</Tag>,    value: 'factoid' },
+              { label: <Tag color="cyan">概念型</Tag>,    value: 'conceptual' },
+              { label: <Tag color="geekblue">程序型</Tag>, value: 'procedural' },
+              { label: <Tag color="orange">推理型</Tag>,  value: 'reasoning' },
+              { label: <Tag color="volcano">归纳型</Tag>, value: 'inferential' },
+              { label: <Tag color="purple">比较型</Tag>,  value: 'comparative' },
+            ]}
+          />
           <Input.Search
             placeholder="搜索问题"
             allowClear
             onSearch={onSearch}
-            style={{ width: 250 }}
+            style={{ width: 220 }}
           />
         </div>
       </div>

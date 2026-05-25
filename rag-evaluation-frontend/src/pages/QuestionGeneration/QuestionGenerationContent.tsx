@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Upload, Spin, Form, InputNumber, Select, Radio, Divider, message, Table, Progress, Alert, Checkbox, Slider, Modal, Tooltip, Input, Badge, Space, Collapse, Typography, Empty, Row, Col } from 'antd';
-import { UploadOutlined, FileTextOutlined, CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, FullscreenOutlined, DeleteOutlined, EyeOutlined, WarningOutlined, InfoCircleOutlined, QuestionCircleOutlined, SettingOutlined } from '@ant-design/icons';
+import { Card, Button, Upload, Spin, Form, InputNumber, Select, Radio, Divider, message, Table, Progress, Alert, Checkbox, Slider, Modal, Tooltip, Input, Badge, Space, Collapse, Typography, Empty, Row, Col, Tag } from 'antd';
+import { UploadOutlined, FileTextOutlined, CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, FullscreenOutlined, DeleteOutlined, EyeOutlined, WarningOutlined, InfoCircleOutlined, QuestionCircleOutlined, SettingOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { questionGeneratorService, SplitterType, FailedRequestRecord } from '../../services/QuestionGeneratorService';
-import { TextChunk, GenerationParams, GeneratedQA, ProgressInfo } from '../../types/question-generator';
+import { TextChunk, GenerationParams, GeneratedQA, ProgressInfo, QuestionType } from '../../types/question-generator';
+import { DatasetType } from '../../types/dataset';
 import styles from './QuestionGeneration.module.css';
 import { ConfigManager, ModelConfig } from '@utils/configManager';
 
@@ -12,6 +13,8 @@ const { Column } = Table;
 
 interface QuestionGenerationContentProps {
   datasetId: string;
+  /** 数据集类型，影响默认提示词和问题类型推荐。standard=普通检索，advanced=高级检索 */
+  datasetType?: DatasetType;
   onGenerationComplete?: () => void;
 }
 
@@ -21,7 +24,11 @@ interface FileContent {
   content: string;
 }
 
-const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ datasetId, onGenerationComplete }) => {
+const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({
+  datasetId,
+  datasetType = 'standard',
+  onGenerationComplete
+}) => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
 
@@ -101,12 +108,11 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
     checkLLMConfig();
   }, []);
 
-  // 在组件初始化时，获取默认提示词模板
+  // 在组件初始化时，根据数据集类型获取对应提示词模板
   useEffect(() => {
-    // 获取默认提示词模板
-    const defaultTemplate = questionGeneratorService.getDefaultPromptTemplate();
-    setCustomPromptTemplate(defaultTemplate);
-  }, []);
+    const template = questionGeneratorService.getPromptTemplateByType(datasetType);
+    setCustomPromptTemplate(template);
+  }, [datasetType]);
 
   const handleFileUpload = async (info: any) => {
     let fileList = [...info.fileList];
@@ -226,9 +232,10 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
     const values = form.getFieldsValue();
     const params: GenerationParams = {
       count: values.count,
-      difficulty: values.difficulty,
+      difficulty: values.difficulty || 'mixed',
       questionTypes: values.questionTypes,
-      maxTokens: values.maxTokens
+      maxTokens: values.maxTokens,
+      datasetType: datasetType
     };
 
     // 获取第一个选中的文本块作为示例
@@ -263,10 +270,11 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
       const values = form.getFieldsValue();
       const params: GenerationParams = {
         count: values.count,
-        difficulty: values.difficulty,
+        difficulty: values.difficulty || 'mixed',
         questionTypes: values.questionTypes,
         maxTokens: values.maxTokens,
-        concurrency: values.concurrency
+        concurrency: values.concurrency,
+        datasetType: datasetType
       };
 
       setIsGenerating(true);
@@ -376,8 +384,8 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
           <Button
             size="small"
             onClick={() => {
-              const defaultTemplate = questionGeneratorService.getDefaultPromptTemplate();
-              setCustomPromptTemplate(defaultTemplate);
+              const template = questionGeneratorService.getPromptTemplateByType(datasetType);
+              setCustomPromptTemplate(template);
             }}
           >
             恢复默认
@@ -586,8 +594,10 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
         layout="horizontal"
         initialValues={{
           count: 3,
-          difficulty: 'medium',
-          questionTypes: ['factoid', 'conceptual'],
+          difficulty: 'mixed',
+          questionTypes: datasetType === 'advanced'
+            ? ['reasoning', 'inferential', 'comparative']
+            : ['factoid', 'conceptual'],
           maxTokens: 1000
         }}
       >
@@ -672,40 +682,79 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
               </Card>
             </Col>
 
-            <Col span={24}>
+            <Col xs={24} sm={12} md={8} lg={8}>
               <Card className={styles.settingCard} bordered={false}>
                 <Form.Item
-                  name="questionTypes"
-                  label="问题类型"
+                  name="difficulty"
+                  label={
+                    <span className={styles.labelWithIcon}>
+                      难度分布
+                      <Tooltip title={
+                        <div>
+                          <p><strong>简单(easy)：</strong>答案可在单一段落直接找到，无需推理</p>
+                          <p><strong>中等(medium)：</strong>需整合同文档 2-3 个事实，或简单解释</p>
+                          <p><strong>困难(hard)：</strong>需跨段落整合、推理或归纳，无直接答案</p>
+                          <p><strong>混合(mixed)：</strong>按上述定义自动分配三种难度</p>
+                        </div>
+                      }>
+                        <QuestionCircleOutlined className={styles.infoIcon} />
+                      </Tooltip>
+                    </span>
+                  }
                   rules={[{ required: true }]}
                 >
-                  <Select mode="multiple" placeholder="请选择问题类型" style={{ width: '100%' }}>
-                    <Option value="factoid">事实型</Option>
-                    <Option value="conceptual">概念型</Option>
-                    <Option value="procedural">程序型</Option>
-                    <Option value="comparative">比较型</Option>
+                  <Select style={{ width: '100%' }}>
+                    <Option value="easy"><Tag color="success">简单</Tag> 单段落直接检索</Option>
+                    <Option value="medium"><Tag color="warning">中等</Tag> 需整合理解</Option>
+                    <Option value="hard"><Tag color="error">困难</Tag> 推理/归纳/多跳</Option>
+                    <Option value="mixed">混合（推荐）</Option>
                   </Select>
                 </Form.Item>
               </Card>
             </Col>
 
-            {/* Commented out difficulty selection can be uncommented if needed later */}
-            {/* <Col xs={24} sm={12} md={8} lg={8}>
+            <Col span={24}>
               <Card className={styles.settingCard} bordered={false}>
                 <Form.Item
-                  name="difficulty"
-                  label="问题难度"
+                  name="questionTypes"
+                  label={
+                    <span className={styles.labelWithIcon}>
+                      问题类型
+                      <Tooltip title={
+                        datasetType === 'advanced'
+                          ? '高级检索数据集推荐使用推理型、归纳型、比较型，这类问题需要跨文档整合和深度推理'
+                          : '普通检索数据集推荐使用事实型、概念型，这类问题可从单一段落直接找到答案'
+                      }>
+                        <QuestionCircleOutlined className={styles.infoIcon} />
+                      </Tooltip>
+                    </span>
+                  }
                   rules={[{ required: true }]}
                 >
-                  <Select style={{ width: '100%' }}>
-                    <Option value="easy">简单</Option>
-                    <Option value="medium">中等</Option>
-                    <Option value="hard">困难</Option>
-                    <Option value="mixed">混合</Option>
+                  <Select mode="multiple" placeholder="请选择问题类型" style={{ width: '100%' }}>
+                    <Select.OptGroup label="── 普通检索推荐 ──">
+                      <Option value="factoid"><Tag color="blue">事实型</Tag> 直接陈述的事实（时间/人物/数量）</Option>
+                      <Option value="conceptual"><Tag color="cyan">概念型</Tag> 解释或阐述概念、定义</Option>
+                      <Option value="procedural"><Tag color="geekblue">程序型</Tag> 操作步骤或流程</Option>
+                    </Select.OptGroup>
+                    <Select.OptGroup label="── 高级检索推荐 ──">
+                      <Option value="reasoning"><Tag color="orange">推理型</Tag> 因果推断、条件推断</Option>
+                      <Option value="inferential"><Tag color="volcano">归纳型</Tag> 跨段落归纳规律/总结</Option>
+                      <Option value="comparative"><Tag color="purple">比较型</Tag> 对比不同信息或观点</Option>
+                    </Select.OptGroup>
                   </Select>
                 </Form.Item>
+                {datasetType === 'advanced' && (
+                  <Alert
+                    message="当前为高级检索数据集模式，提示词已调整为推理/归纳导向，优先生成 medium/hard 难度问题"
+                    type="warning"
+                    showIcon
+                    icon={<ThunderboltOutlined />}
+                    style={{ marginTop: 8 }}
+                  />
+                )}
               </Card>
-            </Col> */}
+            </Col>
           </Row>
         </div>
       </Form>
@@ -1009,14 +1058,15 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
             title="难度"
             dataIndex="difficulty"
             key="difficulty"
-            width={100}
-            render={(text) => {
-              const difficultyMap = {
-                'easy': '简单',
-                'medium': '中等',
-                'hard': '困难'
+            width={90}
+            render={(text: string) => {
+              const cfg: Record<string, { label: string; color: string }> = {
+                easy:   { label: '简单', color: 'success' },
+                medium: { label: '中等', color: 'warning' },
+                hard:   { label: '困难', color: 'error' },
               };
-              return (difficultyMap as any)[text] || text;
+              const c = cfg[text];
+              return c ? <Tag color={c.color}>{c.label}</Tag> : <Tag>{text || '-'}</Tag>;
             }}
           />
           <Column
@@ -1024,14 +1074,17 @@ const QuestionGenerationContent: React.FC<QuestionGenerationContentProps> = ({ d
             dataIndex="category"
             key="category"
             width={100}
-            render={(text) => {
-              const categoryMap = {
-                'factoid': '事实型',
-                'conceptual': '概念型',
-                'procedural': '程序型',
-                'comparative': '比较型'
+            render={(text: string) => {
+              const cfg: Record<string, { label: string; color: string }> = {
+                factoid:     { label: '事实型',  color: 'blue' },
+                conceptual:  { label: '概念型',  color: 'cyan' },
+                procedural:  { label: '程序型',  color: 'geekblue' },
+                reasoning:   { label: '推理型',  color: 'orange' },
+                inferential: { label: '归纳型',  color: 'volcano' },
+                comparative: { label: '比较型',  color: 'purple' },
               };
-              return (categoryMap as any)[text] || text;
+              const c = cfg[text];
+              return c ? <Tag color={c.color}>{c.label}</Tag> : <Tag>{text || '-'}</Tag>;
             }}
           />
           <Column title="来源文件" dataIndex="sourceFileName" key="sourceFileName" width={150} ellipsis />

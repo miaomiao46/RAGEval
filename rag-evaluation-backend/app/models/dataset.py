@@ -17,6 +17,8 @@ class Dataset(Base):
     is_public = Column(Boolean, default=False)
     tags = Column(JSONB, default=list)
     dataset_metadata = Column(JSONB, default=dict)
+    # 数据集类型: standard=普通检索数据集, advanced=高级检索数据集(含推理/归纳)
+    dataset_type = Column(String(20), default="standard", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

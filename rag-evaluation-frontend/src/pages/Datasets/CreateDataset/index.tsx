@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Layout, Typography, Form, Input, Switch, Select, Button, Card, 
-  Radio, Space, message, Divider, Tag, Tooltip
+import {
+  Layout, Typography, Form, Input, Switch, Select, Button, Card,
+  Radio, Space, message, Divider, Tag, Tooltip, Alert
 } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PlusOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { CreateDatasetRequest } from '../../../types/dataset';
+import { CreateDatasetRequest, DatasetType } from '../../../types/dataset';
 import { datasetService } from '../../../services/dataset.service';
 import styles from './CreateDataset.module.css';
 
@@ -19,7 +19,8 @@ const CreateDatasetPage: React.FC = () => {
   const [tags, setTags] = useState<string[]>([]);
   const [inputVisible, setInputVisible] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  
+  const [datasetType, setDatasetType] = useState<DatasetType>('standard');
+
   const navigate = useNavigate();
 
   const handleSubmit = async (values: any) => {
@@ -31,6 +32,7 @@ const CreateDatasetPage: React.FC = () => {
         description: values.description,
         is_public: values.is_public,
         tags,
+        dataset_type: datasetType,
         dataset_metadata: {
           created_method: importOption
         }
@@ -118,12 +120,69 @@ const CreateDatasetPage: React.FC = () => {
               label="数据集描述"
               className={styles.formItem}
             >
-              <TextArea 
-                rows={4} 
-                placeholder="简单描述这个数据集的内容和用途" 
+              <TextArea
+                rows={4}
+                placeholder="简单描述这个数据集的内容和用途"
                 maxLength={500}
                 showCount
               />
+            </Form.Item>
+
+            <Form.Item
+              label="数据集类型"
+              required
+              className={styles.formItem}
+            >
+              <Radio.Group
+                value={datasetType}
+                onChange={(e) => setDatasetType(e.target.value)}
+                style={{ width: '100%' }}
+              >
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Radio value="standard">
+                    <Space>
+                      <SearchOutlined style={{ color: '#1890ff' }} />
+                      <span><strong>普通检索数据集</strong></span>
+                      <Tag color="blue">easy / medium</Tag>
+                    </Space>
+                  </Radio>
+                  <Alert
+                    style={{ marginLeft: 24, marginBottom: 8 }}
+                    message="测试 RAG 系统的基础检索准确性"
+                    description={
+                      <ul style={{ margin: 0, paddingLeft: 16 }}>
+                        <li>问题答案可以从<strong>单一文本片段</strong>中直接找到</li>
+                        <li>难度以<strong>简单（easy）和中等（medium）</strong>为主</li>
+                        <li>问题类型：事实型、概念型、程序型</li>
+                        <li>适用场景：知识库问答、文档检索基准测试</li>
+                      </ul>
+                    }
+                    type="info"
+                    showIcon={false}
+                  />
+                  <Radio value="advanced">
+                    <Space>
+                      <ThunderboltOutlined style={{ color: '#fa8c16' }} />
+                      <span><strong>高级检索数据集</strong></span>
+                      <Tag color="orange">medium / hard</Tag>
+                    </Space>
+                  </Radio>
+                  <Alert
+                    style={{ marginLeft: 24 }}
+                    message="测试 RAG 系统的深度理解、推理和多跳检索能力"
+                    description={
+                      <ul style={{ margin: 0, paddingLeft: 16 }}>
+                        <li>问题需要<strong>跨段落信息整合</strong>或<strong>推理归纳</strong>才能回答</li>
+                        <li>难度以<strong>中等（medium）和困难（hard）</strong>为主</li>
+                        <li>问题类型：推理型、归纳型、比较型</li>
+                        <li>适用场景：复杂知识推理、多文档综合分析能力评测</li>
+                      </ul>
+                    }
+                    type="warning"
+                    showIcon={false}
+                  />
+                </Space>
+              </Radio.Group>
             </Form.Item>
 
             <Form.Item

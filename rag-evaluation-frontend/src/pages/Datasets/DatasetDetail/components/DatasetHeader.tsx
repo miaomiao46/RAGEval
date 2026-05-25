@@ -1,8 +1,9 @@
 import React from 'react';
-import { Typography, Button, Tag, Space, Dropdown, Menu } from 'antd';
-import { 
+import { Typography, Button, Tag, Space, Dropdown, Menu, Tooltip } from 'antd';
+import {
   EditOutlined, DeleteOutlined, DownloadOutlined,
-  UploadOutlined, EyeOutlined, LockOutlined
+  UploadOutlined, EyeOutlined, LockOutlined,
+  SearchOutlined, ThunderboltOutlined, InfoCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { DatasetDetail } from '../../../../types/dataset';
@@ -35,6 +36,16 @@ const DatasetHeader: React.FC<DatasetHeaderProps> = ({
         <div className={styles.titleInfo}>
           <Title level={2}>{dataset.name}</Title>
           <div className={styles.titleMeta}>
+            {/* 数据集类型标签 */}
+            {dataset.dataset_type === 'advanced' ? (
+              <Tooltip title="高级检索数据集：包含需要推理、归纳或跨文档整合的问题（medium/hard难度为主）">
+                <Tag color="orange" icon={<ThunderboltOutlined />}>高级检索</Tag>
+              </Tooltip>
+            ) : (
+              <Tooltip title="普通检索数据集：问题答案可从单一文本片段直接找到（easy/medium难度为主）">
+                <Tag color="blue" icon={<SearchOutlined />}>普通检索</Tag>
+              </Tooltip>
+            )}
             {dataset.is_public ? (
               <Tag color="green" icon={<EyeOutlined />}>公开</Tag>
             ) : (

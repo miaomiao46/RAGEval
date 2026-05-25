@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Modal, Typography, Form, Input, Switch, Button, Tag, message
+  Modal, Typography, Form, Input, Switch, Button, Tag, message, Radio, Space
 } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
-import { Dataset, UpdateDatasetRequest } from '../../../types/dataset';
+import { PlusOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Dataset, UpdateDatasetRequest, DatasetType } from '../../../types/dataset';
 import { datasetService } from '../../../services/dataset.service';
 
 const { Text } = Typography;
@@ -29,6 +29,7 @@ const EditDatasetModal: React.FC<EditDatasetModalProps> = ({
   const [tags, setTags] = useState<string[]>([]);
   const [inputVisible, setInputVisible] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [datasetType, setDatasetType] = useState<DatasetType>('standard');
 
   // 当数据集变化时，重置表单
   useEffect(() => {
@@ -39,6 +40,7 @@ const EditDatasetModal: React.FC<EditDatasetModalProps> = ({
         is_public: dataset.is_public
       });
       setTags(dataset.tags || []);
+      setDatasetType(dataset.dataset_type || 'standard');
     }
   }, [dataset, visible, open, form]);
 
@@ -51,7 +53,8 @@ const EditDatasetModal: React.FC<EditDatasetModalProps> = ({
         name: values.name,
         description: values.description,
         is_public: values.is_public,
-        tags: tags
+        tags: tags,
+        dataset_type: datasetType
       };
 
       if (dataset) {
@@ -164,6 +167,29 @@ const EditDatasetModal: React.FC<EditDatasetModalProps> = ({
             )}
           </div>
           <Text type="secondary">添加标签可以帮助更好地分类和查找数据集</Text>
+        </Form.Item>
+
+        <Form.Item label="数据集类型">
+          <Radio.Group value={datasetType} onChange={(e) => setDatasetType(e.target.value)}>
+            <Space direction="vertical">
+              <Radio value="standard">
+                <Space>
+                  <SearchOutlined style={{ color: '#1890ff' }} />
+                  <strong>普通检索</strong>
+                  <Tag color="blue">easy / medium</Tag>
+                  <Text type="secondary">— 直接事实检索，单一段落可答</Text>
+                </Space>
+              </Radio>
+              <Radio value="advanced">
+                <Space>
+                  <ThunderboltOutlined style={{ color: '#fa8c16' }} />
+                  <strong>高级检索</strong>
+                  <Tag color="orange">medium / hard</Tag>
+                  <Text type="secondary">— 推理/归纳/多跳检索</Text>
+                </Space>
+              </Radio>
+            </Space>
+          </Radio.Group>
         </Form.Item>
 
         <Form.Item

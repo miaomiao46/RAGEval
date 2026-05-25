@@ -52,30 +52,49 @@ export class QuestionGeneratorService {
   private failedRequests: FailedRequestRecord[] = [];
   private activeLLMClients: LLMClient[] = []; // 添加活跃的LLMClient列表
 
-// TODO 5. 原文依据:原文依据应该来源于原文，并不超过10个字
-  
+  // ───────────────────────────────────────────────────────────
+  // 难度等级定义（RAG 评测语境）
+  //
+  // easy（简单）- 普通检索
+  //   答案可以在单一文本片段中直接找到，无需推理。
+  //   典型问题：特定时间、人名、数量、单步骤操作。
+  //
+  // medium（中等）- 需一定理解
+  //   答案需要整合同一文档中 2-3 个相关事实，或对概念进行简单解释。
+  //   典型问题：概念解释、两步骤推导、同段落内的比较。
+  //
+  // hard（困难）- 高级检索（推理/归纳）
+  //   答案需要跨多个段落/文档进行信息整合，或通过推理、归纳得出，
+  //   文本中没有直接陈述，需要综合分析。
+  //   典型问题：因果推断、跨文档归纳、复杂比较、隐含信息推断。
+  // ───────────────────────────────────────────────────────────
 
-  // 默认提示词模板
+  // 普通检索数据集提示词模板（standard）
+  // 以 easy/medium 难度为主，聚焦直接事实检索
   private defaultPromptTemplate = `你是一个专业的问答对生成专家，擅长根据文本生成多样性高、质量优的问答对。
 请根据以下文本生成 {{count}} 个问答对：
 
 文本内容：
 "{{text}}"
 
+### 难度等级定义（RAG检索难度）：
+- **简单（easy）**：答案可以在单一文本片段中直接找到，无需推理。例如：特定时间、人名、数量等直接陈述的事实。
+- **中等（medium）**：答案需要整合同一段落中 2-3 个相关事实，或对概念进行简单解释。
+- **困难（hard）**：答案需要跨多个段落进行信息整合，或通过推理/归纳得出，文本中没有直接陈述。
+
 ### 生成要求：
-1. **问题：** 
+1. **问题：**
    - 问题要精准、清晰，直接基于文本内容，避免使用"本文"、"文中"、"文章中"等字眼。
-   - 模拟用户提问的方式，问题应自然流畅，覆盖不同角度，包括细节、概念、流程、对比等。
+   - 模拟用户提问的方式，问题应自然流畅。
+   - 难度分布：简单占 50%，中等占 40%，困难占 10%。
 2. **答案：**
    - 简明扼要，紧扣问题核心，不要超出文本信息。
-3. **难度：**
-   - 覆盖 简单、中等 和 困难 三个难度，难度层次合理分布。
-4. **类别：**
-   - 包括以下类别： 
-     - 事实型：基于文本事实的信息
-     - 概念型：解释或阐述某个概念
-     - 程序型：涉及操作步骤或流程
-     - 比较型：比较不同信息或观点
+3. **类别：**
+   - 包括以下类别（优先选用前两种）：
+     - 事实型（factoid）：基于文本直接陈述的事实（时间、人物、数量等）
+     - 概念型（conceptual）：解释或阐述某个概念、定义
+     - 程序型（procedural）：涉及操作步骤或流程
+     - 比较型（comparative）：比较不同信息或观点（较少使用）
 
 ### 输出格式要求：
 - 以 JSON 数组格式返回，格式如下：
@@ -84,14 +103,59 @@ export class QuestionGeneratorService {
   {
     "question": "问题内容",
     "answer": "答案内容",
-    "difficulty": "简单/中等/困难",
-    "category": "事实型/概念型/程序型/比较型"
+    "difficulty": "easy/medium/hard",
+    "category": "factoid/conceptual/procedural/comparative"
   }
 ]
 \`\`\`
 请注意：
 1. 确保问答对具有高质量、多样性，并严格按照指定格式输出。
-2. category 字段必须从以下值中选择之一：事实型、概念型、程序型、比较型。
+2. difficulty 字段必须使用英文：easy、medium 或 hard。
+3. category 字段必须从以下英文值中选择：factoid、conceptual、procedural、comparative。
+`;
+
+  // 高级检索数据集提示词模板（advanced）
+  // 以 medium/hard 难度为主，聚焦推理、归纳、多跳检索
+  private advancedPromptTemplate = `你是一个专业的问答对生成专家，专注于生成需要深度理解和推理的高质量问答对。
+请根据以下文本生成 {{count}} 个高级检索问答对：
+
+文本内容：
+"{{text}}"
+
+### 难度等级定义（RAG检索难度）：
+- **简单（easy）**：答案可以在单一文本片段中直接找到，无需推理。（本数据集较少使用）
+- **中等（medium）**：答案需要整合同一段落中 2-3 个相关事实，需要理解关系或进行简单推断。
+- **困难（hard）**：答案无法从单一片段直接获取，需要跨段落信息整合、因果推理、归纳总结或隐含推断。
+
+### 生成要求：
+1. **问题：**
+   - 问题要体现较高的认知层次，需要用户进行推理、对比或综合分析。
+   - 避免可以直接在文本中找到答案的简单查询型问题。
+   - 难度分布：简单占 10%，中等占 40%，困难占 50%。
+2. **答案：**
+   - 答案应清晰展示推理过程或综合依据，不仅仅是摘录原文。
+3. **类别（重点使用以下高级类型）：**
+   - 推理型（reasoning）：需要从文本信息推导出隐含结论，如因果推断、条件推断
+   - 归纳型（inferential）：需要跨多个段落归纳出规律、模式或总体性结论
+   - 比较型（comparative）：对比不同信息、观点、实体的异同并得出判断
+   - 概念型（conceptual）：深度理解和解释复杂概念（较少使用）
+
+### 输出格式要求：
+- 以 JSON 数组格式返回，格式如下：
+\`\`\`json
+[
+  {
+    "question": "问题内容",
+    "answer": "答案内容（体现推理过程）",
+    "difficulty": "easy/medium/hard",
+    "category": "reasoning/inferential/comparative/conceptual"
+  }
+]
+\`\`\`
+请注意：
+1. 确保问答对具有高质量，体现深度理解能力，并严格按照指定格式输出。
+2. difficulty 字段必须使用英文：easy、medium 或 hard。
+3. category 字段必须从以下英文值中选择：reasoning、inferential、comparative、conceptual。
 `;
 
   constructor() {
@@ -388,72 +452,28 @@ export class QuestionGeneratorService {
   }
 
   // 构建提示词
+  // 根据 datasetType 选择对应模板（standard / advanced），支持自定义模板覆盖
   private buildPrompt(text: string, params: GenerationParams, customTemplate?: string): string {
-    let prompt = customTemplate || this.defaultPromptTemplate;
-    
-    // 替换占位符
+    // 优先使用自定义模板，其次根据数据集类型选择内置模板
+    let prompt: string;
+    if (customTemplate) {
+      prompt = customTemplate;
+    } else if (params.datasetType === 'advanced') {
+      prompt = this.advancedPromptTemplate;
+    } else {
+      prompt = this.defaultPromptTemplate;
+    }
+
+    // 替换基础占位符
     prompt = prompt.replace(/\{\{text\}\}/g, text);
     prompt = prompt.replace(/\{\{count\}\}/g, params.count.toString());
-    
-    // 如果是使用默认模板，还需处理其他替换
-    if (!customTemplate) {
-      prompt = prompt.replace(/\{\{difficulty\}\}/g, params.difficulty);
-      
-      // 添加对问题类型的处理
-      if (params.questionTypes && params.questionTypes.length > 0) {
-        // 构建类别描述（使用中文类别）
-        const categoryMap: Record<string, string> = {
-          'factoid': '事实型：基于文本事实的信息',
-          'conceptual': '概念型：解释或阐述某个概念',
-          'procedural': '程序型：涉及操作步骤或流程',
-          'comparative': '比较型：比较不同信息或观点'
-        };
-        
-        // 根据用户选择的类型过滤
-        const selectedCategories = params.questionTypes
-          .map(type => categoryMap[type])
-          .filter(Boolean);
-        
-        // 如果用户有选择类型，替换模板中的类别部分
-        if (selectedCategories.length > 0) {
-          // 使用正则表达式替换类别部分
-          prompt = prompt.replace(
-            /4\. \*\*类别：\*\*\s*- 包括以下类别：\s*([\s\S]*?)(?=\n\n|\n###)/m,
-            `4. **类别：**\n   - 仅包括以下用户选择的类别：\n     - ${selectedCategories.join('\n     - ')}`
-          );
-          
-          // 修改输出格式要求中的category说明
-          const categoryValueMap: Record<string, string> = {
-            'factoid': '事实型',
-            'conceptual': '概念型',
-            'procedural': '程序型',
-            'comparative': '比较型'
-          };
-          
-          const categoryValues = params.questionTypes
-            .map(type => categoryValueMap[type])
-            .filter(Boolean)
-            .join('/');
-          
-          // 替换输出格式中的category部分
-          prompt = prompt.replace(
-            /"category": "事实型\/概念型\/程序型\/比较型"/,
-            `"category": "${categoryValues}"`
-          );
-          
-          // 更新注意事项中的category说明
-          const categoryMapping = params.questionTypes
-            .map(type => `${categoryValueMap[type]}`)
-            .join('、');
-          
-          prompt = prompt.replace(
-            /2\. category 字段必须从以下值中选择之一：事实型、概念型、程序型、比较型。/,
-            `2. category 字段必须从以下值中选择之一：${categoryMapping}。`
-          );
-        }
-      }
+
+    // 如果用户明确选择了问题类型，追加约束说明
+    if (!customTemplate && params.questionTypes && params.questionTypes.length > 0) {
+      const selectedTypes = params.questionTypes.join('、');
+      prompt += `\n\n> **注意：** 本次仅生成以下类型的问题：${selectedTypes}，category 字段值必须从这些类型中选择。`;
     }
-    
+
     return prompt;
   }
 
@@ -498,42 +518,81 @@ export class QuestionGeneratorService {
     }
   }
 
+  // ───────────────────────────────────────────────────────────
+  // 难度值规范化：统一转换为英文 easy/medium/hard
+  // 处理 LLM 可能返回的中英文混合情况
+  // ───────────────────────────────────────────────────────────
+  private normalizeDifficulty(raw: string): 'easy' | 'medium' | 'hard' {
+    const val = (raw || '').trim().toLowerCase();
+    // 中文映射
+    if (val === '简单' || val === '容易') return 'easy';
+    if (val === '中等' || val === '普通') return 'medium';
+    if (val === '困难' || val === '难') return 'hard';
+    // 英文映射
+    if (val === 'easy') return 'easy';
+    if (val === 'medium') return 'medium';
+    if (val === 'hard') return 'hard';
+    // 默认返回 medium
+    return 'medium';
+  }
+
+  // ───────────────────────────────────────────────────────────
+  // 类别值规范化：统一转换为英文类别键
+  // 支持所有普通检索 + 高级检索类别
+  // ───────────────────────────────────────────────────────────
+  private normalizeCategory(raw: string): string {
+    const val = (raw || '').trim();
+    // 中文 → 英文
+    const zhMap: Record<string, string> = {
+      '事实型': 'factoid',
+      '概念型': 'conceptual',
+      '程序型': 'procedural',
+      '比较型': 'comparative',
+      '推理型': 'reasoning',
+      '归纳型': 'inferential',
+    };
+    if (zhMap[val]) return zhMap[val];
+    // 英文直通（合法值）
+    const validCategories = ['factoid', 'conceptual', 'procedural', 'comparative', 'reasoning', 'inferential'];
+    if (validCategories.includes(val.toLowerCase())) return val.toLowerCase();
+    // 默认
+    return 'factoid';
+  }
+
   // 解析LLM响应
   private parseResponse(response: string, chunkId: string): GeneratedQA[] {
     try {
       // 尝试提取JSON部分
       const jsonMatch = response.match(/\[[\s\S]*\]/);
-      
+
       if (!jsonMatch) {
         throw new Error('无法从响应中提取JSON格式的问答对');
       }
-      
+
       const qaPairsData = JSON.parse(jsonMatch[0]);
-      
+
       // 获取文件名
       const sourceFileName = this.fileSourceMap.get(chunkId) || '未知文件';
-      
-      // 验证并转换为标准格式
+
+      // 验证并转换为标准格式（规范化 difficulty 和 category 为英文）
       const qaPairs: GeneratedQA[] = qaPairsData.map((item: any) => ({
         id: uuidv4(),
         question: item.question,
         answer: item.answer,
-        difficulty: item.difficulty || 'medium',
-        category: item.category || 'factoid',
+        difficulty: this.normalizeDifficulty(item.difficulty),
+        category: this.normalizeCategory(item.category),
         sourceChunkId: chunkId,
         sourceFileName: sourceFileName
       }));
-      
+
       return qaPairs;
     } catch (error) {
       console.error('解析LLM响应失败:', error, 'Response:', response);
       const errorInfo = {
-        // 原始响应
         rawResponse: response,
-        // 错误信息
         message: '解析响应失败: ' + (error as Error).message
       };
-      
+
       throw errorInfo;
     }
   }
@@ -812,9 +871,19 @@ export class QuestionGeneratorService {
     return this.buildPrompt(text, params, customTemplate);
   }
 
-  // 添加获取默认提示词模板的方法
+  // 获取普通检索数据集默认提示词模板
   public getDefaultPromptTemplate(): string {
     return this.defaultPromptTemplate;
+  }
+
+  // 获取高级检索数据集提示词模板
+  public getAdvancedPromptTemplate(): string {
+    return this.advancedPromptTemplate;
+  }
+
+  // 根据数据集类型获取对应提示词模板
+  public getPromptTemplateByType(datasetType: 'standard' | 'advanced'): string {
+    return datasetType === 'advanced' ? this.advancedPromptTemplate : this.defaultPromptTemplate;
   }
 }
 
