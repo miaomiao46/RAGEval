@@ -33,6 +33,7 @@ def serialize_dataset(
         "is_public": dataset.is_public,
         "tags": dataset.tags or [],
         "dataset_metadata": dataset.dataset_metadata or {},
+        "dataset_type": dataset.dataset_type or "standard",
         "question_count": question_count,
         "created_at": dataset.created_at,
         "updated_at": dataset.updated_at,

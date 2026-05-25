@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any, Tuple
+import uuid as _uuid_module
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_, and_
@@ -114,10 +115,17 @@ def create_questions_batch(
     dataset_id: str,
     questions: List[QuestionBase],
 ) -> List[Question]:
+    # SQLAlchemy 2.x 批量 ORM 插入时使用 INSERT ... RETURNING，
+    # 并以插入前 Python 对象上的主键值作为"哨兵键"来回填结果行。
+    # Question.id 的列默认是 uuid.uuid4()（返回 uuid.UUID 对象），
+    # 而 StringUUID.process_result_value 把 RETURNING 结果转成 str，
+    # 导致类型不匹配（UUID("...") != "abc-..."），触发 InvalidRequestError。
+    # 解决：插入前预先生成 str 类型的 UUID，使哨兵键与结果值类型一致。
     db_objs = []
 
     for item in questions:
         obj_in_data = jsonable_encoder(item)
+        obj_in_data['id'] = str(_uuid_module.uuid4())   # 预生成 str UUID
         db_obj = Question(**obj_in_data, dataset_id=dataset_id)
         db.add(db_obj)
         db_objs.append(db_obj)
