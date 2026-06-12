@@ -389,47 +389,76 @@ export class RAGRequestService {
     const reader = response.body?.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    // 跨 chunk 保持当前 SSE event: 行的值
+    let currentSseEvent = '';
 
     if (!reader) {
       throw new Error('无法读取响应流');
     }
 
-    // 循环读取流数据
-    while (true) {
+    const doneEvent = config.sseDoneEvent ?? 'done';
+    let streamDone = false;
+
+    while (!streamDone) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      // 解码并处理数据
       buffer += decoder.decode(value, { stream: true });
       let lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
-      // 处理每一行SSE数据
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const jsonStr = line.replace('data: ', '').trim();
-          if (jsonStr && jsonStr !== '[DONE]') {
-            try {
-              // 解析JSON数据
-              const eventData = JSON.parse(jsonStr);
+        // 解析 SSE 协议的 event: 行（兼容有无空格）
+        if (/^event:\s*/.test(line)) {
+          currentSseEvent = line.replace(/^event:\s*/, '').trim();
+          continue;
+        }
 
-              // 根据事件字段和值提取内容
-              if (
-                config.streamEventField &&
-                config.streamEventValue &&
-                eventData[config.streamEventField] === config.streamEventValue
-              ) {
-                // 提取内容块
-                const chunkText = extractFromPath(eventData, config.responsePath || '') || '';
-                if (chunkText) yield chunkText;
-              } else if (!config.streamEventField) {
-                // 如果没有指定事件字段，直接从响应路径提取
-                const chunkText = extractFromPath(eventData, config.responsePath || '') || '';
-                if (chunkText) yield chunkText;
-              }
+        // 空行代表一个 SSE 事件块结束，重置事件名
+        if (line.trim() === '') {
+          currentSseEvent = '';
+          continue;
+        }
+
+        if (line.startsWith('data: ') || line.startsWith('data:')) {
+          const jsonStr = line.replace(/^data:\s*/, '').trim();
+          if (!jsonStr || jsonStr === '[DONE]') continue;
+
+          // --- SSE 协议级别过滤（sseEventName 优先）---
+          if (config.sseEventName) {
+            if (currentSseEvent === doneEvent) {
+              streamDone = true;
+              break;
+            }
+            if (currentSseEvent !== config.sseEventName) continue;
+
+            try {
+              const eventData = JSON.parse(jsonStr);
+              const chunkText = extractFromPath(eventData, config.responsePath || '') || '';
+              if (chunkText) yield chunkText;
             } catch (e) {
               // 忽略解析失败的行
             }
+            continue;
+          }
+
+          // --- 原有 JSON 字段级别过滤（streamEventField）---
+          try {
+            const eventData = JSON.parse(jsonStr);
+
+            if (
+              config.streamEventField &&
+              config.streamEventValue &&
+              eventData[config.streamEventField] === config.streamEventValue
+            ) {
+              const chunkText = extractFromPath(eventData, config.responsePath || '') || '';
+              if (chunkText) yield chunkText;
+            } else if (!config.streamEventField) {
+              const chunkText = extractFromPath(eventData, config.responsePath || '') || '';
+              if (chunkText) yield chunkText;
+            }
+          } catch (e) {
+            // 忽略解析失败的行
           }
         }
       }

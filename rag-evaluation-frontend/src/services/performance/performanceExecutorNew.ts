@@ -362,6 +362,11 @@ const executeWithBufferedQuestions = async (
           if (question) {
             // 如果有问题，处理它
             await processQuestion(question);
+            // 请求间隔
+            const intervalMs = (test.request_interval ?? 0) * 1000;
+            if (intervalMs > 0 && shouldContinueTesting()) {
+              await new Promise(r => setTimeout(r, intervalMs));
+            }
           } else if (!questionBuffer.hasMore()) {
             // 如果没有问题且没有更多数据可加载，标记完成
             allQuestionsProcessed = true;

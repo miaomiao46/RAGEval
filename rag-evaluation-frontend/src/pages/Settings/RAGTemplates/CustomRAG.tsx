@@ -133,17 +133,31 @@ const CustomRAG: React.FC<{
         </Form.Item>
         <Form.Item
           name="streamEventField"
-          label={labelWithTip('事件类型字段', '有些RAG系统会流式返回多种类型的数据（如图表、文本），这里填写类型的字段名称，如：event。如没有，则留空。')}
+          label={labelWithTip('事件类型字段（JSON内）', '数据体内用于区分事件类型的字段名，如：event。与下方"SSE事件名"二选一，同时填写时SSE事件名优先。')}
           rules={[]}
         >
           <Input placeholder="event（可选）" />
         </Form.Item>
         <Form.Item
           name="streamEventValue"
-          label={labelWithTip('事件类型值', '文本类型字段对应的值，如：message/text_chunk')}
+          label={labelWithTip('事件类型值（JSON内）', '文本类型字段对应的值，如：message / text_chunk')}
           rules={[]}
         >
           <Input placeholder="message（可选）" />
+        </Form.Item>
+        <Form.Item
+          name="sseEventName"
+          label={labelWithTip('SSE事件名', '若RAG以 event:xxx / data:{...} 格式返回，填写要提取内容的事件名，如：delta。填写后上方JSON字段过滤失效。')}
+          rules={[]}
+        >
+          <Input placeholder="delta（可选）" />
+        </Form.Item>
+        <Form.Item
+          name="sseDoneEvent"
+          label={labelWithTip('SSE结束事件名', '标志流结束的SSE事件名，默认为 done')}
+          rules={[]}
+        >
+          <Input placeholder="done（可选，默认done）" />
         </Form.Item>
       </Form>
     </Modal>

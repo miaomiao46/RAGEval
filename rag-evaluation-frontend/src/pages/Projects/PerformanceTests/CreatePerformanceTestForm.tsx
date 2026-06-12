@@ -89,6 +89,7 @@ export const CreatePerformanceTestForm: React.FC<CreatePerformanceTestFormProps>
           initialValues={{
             name: `${new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' })} - 性能测试`,
             concurrency: 1,
+            request_interval: 0,
           }}
         >
           <Form.Item
@@ -134,6 +135,14 @@ export const CreatePerformanceTestForm: React.FC<CreatePerformanceTestFormProps>
             rules={[{ required: true, message: '请输入并发请求数' }]}
           >
             <InputNumber min={1} max={50} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="request_interval"
+            label="请求间隔（秒）"
+            extra="每条请求完成后等待指定秒数再发下一条，0 表示不等待"
+          >
+            <InputNumber min={0} max={3600} precision={1} style={{ width: '100%' }} />
           </Form.Item>
           
           <Form.Item

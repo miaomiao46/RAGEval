@@ -26,6 +26,9 @@ export interface RAGConfig extends BaseConfig {
   responsePath?: string;
   streamEventField?: string;
   streamEventValue?: string;
+  // SSE 协议级别的事件过滤（event: 行），与 streamEventField/Value（data 内 JSON 字段过滤）互斥
+  sseEventName?: string;   // 匹配的 SSE event 名，如 "delta"
+  sseDoneEvent?: string;   // 结束流的 SSE event 名，默认 "done"
 }
 
 // 用户配置存储结构
