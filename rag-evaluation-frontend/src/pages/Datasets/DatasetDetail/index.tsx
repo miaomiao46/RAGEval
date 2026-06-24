@@ -18,6 +18,7 @@ import DatasetHeader from './components/DatasetHeader';
 import QuestionListTab from './components/QuestionListTab';
 import RelatedProjectsTab from './components/RelatedProjectsTab';
 import AddQuestionModal from './components/AddQuestionModal';
+import DifyQAGeneration from './components/DifyQAGeneration';
 import RagAnswerModal from './components/RagAnswerModal';
 
 const { Title, Text } = Typography;
@@ -600,6 +601,24 @@ const DatasetDetailPage: React.FC = () => {
               <QuestionGenerationContent
                 datasetId={id}
                 datasetType={dataset.dataset_type}
+                onGenerationComplete={() => {
+                  fetchQuestions(id, {
+                    page: currentPage,
+                    size: pageSize,
+                    search: searchText,
+                    category: categoryFilter,
+                    difficulty: difficultyFilter
+                  });
+                }}
+              />
+            )}
+          </TabPane>
+
+          {/* Dify 知识库生成问答对 */}
+          <TabPane tab="Dify生成问答对" key="dify-qa">
+            {dataset && id && (
+              <DifyQAGeneration
+                datasetId={id}
                 onGenerationComplete={() => {
                   fetchQuestions(id, {
                     page: currentPage,

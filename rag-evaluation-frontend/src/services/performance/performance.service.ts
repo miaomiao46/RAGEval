@@ -130,7 +130,7 @@ export const performanceService = {
 
   markInterrupted: async (id: string): Promise<void> => {
     try {
-      await api.put(`/v1/performance/${id}/interrupt`);
+      await api.post(`/v1/performance/${id}/interrupt`, { reason: '手动中断测试' });
     } catch (error) {
       console.error('标记测试中断失败:', error);
       throw error;
@@ -139,7 +139,7 @@ export const performanceService = {
 
   resetTest: async (id: string): Promise<void> => {
     try {
-      await api.post(`/performance/${id}/reset`);
+      await api.post(`/v1/performance/${id}/reset`);
     } catch (error) {
       console.error('重置测试失败:', error);
       throw error;

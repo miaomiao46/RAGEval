@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -494,4 +495,58 @@ def export_questions(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": content_disposition}
-    ) 
+    )
+
+
+# ── Dify 知识库问答对生成 ──────────────────────────────────────────────────────
+
+class DifyChunksRequest(BaseModel):
+    dify_base_url: str
+    dify_api_key: str
+    dify_knowledge_id: Optional[str] = None  # 不填则使用该 API Key 下所有知识库
+    generation_type: str  # "single_doc" | "cross_doc"
+    count: Optional[int] = 5  # 仅 cross_doc 有效
+
+
+@router.post("/{dataset_id}/dify/chunks")
+async def prepare_dify_chunks(
+    *,
+    db: Session = Depends(get_db),
+    dataset_id: str,
+    body: DifyChunksRequest,
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    调用 Dify Knowledge API 为问答对生成准备文本片段。
+    single_doc: 每个文档取一个 chunk，返回与文档数等量的组。
+    cross_doc:  随机组合文档，每组最多 5 个文档各取一个 chunk，返回 count 组。
+    """
+    from app.services.dify_qa_service import DifyClient
+    import httpx
+
+    dataset = service_get_dataset(db, dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="数据集未找到")
+    if not dataset.is_public and str(dataset.user_id) != str(current_user.id) and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="无权访问此数据集")
+
+    client = DifyClient(body.dify_base_url, body.dify_api_key)
+
+    try:
+        if body.generation_type == "single_doc":
+            groups, doc_count = await client.prepare_single_doc_groups(body.dify_knowledge_id)
+        elif body.generation_type == "cross_doc":
+            count = max(1, body.count or 5)
+            groups, doc_count = await client.prepare_cross_doc_groups(body.dify_knowledge_id, count)
+        else:
+            raise HTTPException(status_code=400, detail="generation_type 必须为 single_doc 或 cross_doc")
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=400, detail=f"Dify API 错误 ({exc.response.status_code}): {exc.response.text[:200]}")
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=400, detail=f"连接 Dify 失败: {str(exc)}")
+
+    return {
+        "generation_type": body.generation_type,
+        "groups": groups,
+        "doc_count": doc_count,
+    }

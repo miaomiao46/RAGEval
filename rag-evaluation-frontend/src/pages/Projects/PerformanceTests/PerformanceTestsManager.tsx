@@ -188,7 +188,6 @@ export const PerformanceTestsManager: React.FC<PerformanceTestsManagerProps> = (
 
       if (success) {
         message.success('测试执行完成');
-        fetchTests(); // 刷新测试列表
       } else {
         message.error('测试执行失败');
       }
@@ -197,6 +196,7 @@ export const PerformanceTestsManager: React.FC<PerformanceTestsManagerProps> = (
       message.error('运行测试失败: ' + (error as any).message);
     } finally {
       setRunningTestId(null);
+      fetchTests();
     }
   };
 

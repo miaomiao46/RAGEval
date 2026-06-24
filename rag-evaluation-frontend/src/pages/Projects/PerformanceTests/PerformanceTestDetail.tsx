@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Drawer, Descriptions, Statistic, Card, Row, Col,
   Divider, Table, Tag, Space, Progress, Typography, Button, Spin, Empty, message, List, Input, Select
@@ -74,6 +74,33 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
         });
     }
   }, [visible, testId]);
+
+  // 测试运行中时每 3 秒轮询刷新数据和问答对
+  useEffect(() => {
+    if (!visible || !testId || testData?.status !== 'running') return;
+
+    const timer = setInterval(async () => {
+      try {
+        const newData = await performanceService.getById(testId);
+        setTestData(newData);
+        const res = await performanceService.fetchTestDetail(testId, 1, 10);
+        if (res && (res as any).items) {
+          setQAPairs((res as any).items);
+          setPagination(prev => ({
+            ...prev,
+            current: (res as any).page,
+            pageSize: (res as any).size,
+            total: (res as any).total,
+          }));
+        }
+      } catch (error) {
+        console.error('轮询刷新失败:', error);
+      }
+    }, 3000);
+
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, testId, testData?.status]);
 
   const renderStatusTag = (status: string) => {
     let color = 'default';
@@ -439,7 +466,7 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
                 {testData.status !== 'completed'
                 && (
                   <>
-                <Divider orientation="left">测试进行中 - 请全部测试完毕后查看</Divider>
+                <Divider orientation="left">测试进行中</Divider>
                 <div className={styles.progressContainer}>
                   <Progress
                   style={{marginLeft: '20px'}}
@@ -492,7 +519,7 @@ export const PerformanceTestDetail: React.FC<PerformanceTestDetailProps> = ({
             </>
           )}
 
-          {testData.status === 'completed' && (
+          {(testData.status === 'completed' || testData.status === 'running' || testData.status === 'interrupted' || testData.status === 'failed') && (
             <>
               <Divider orientation="left">问答对列表</Divider>
 
