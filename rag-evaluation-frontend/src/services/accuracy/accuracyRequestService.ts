@@ -51,7 +51,8 @@ export class AccuracyRequestService {
       systemMessage: '你是一个专业的RAG回答评估专家，你的任务是评估生成式AI的回答质量。请根据提供的标准答案评价RAG系统的回答质量，分析其准确性、相关性和完整性。',
       additionalParams: {
         temperature: 0.2,
-        max_tokens: 1000
+        // 预留足够空间，避免思考过程过长导致YAML被截断
+        max_tokens: 4096
       }
     });
     return response;
@@ -70,28 +71,48 @@ export class AccuracyRequestService {
     item_metadata: string
   } {
     try {
-      // 查找分隔符 #### 并获取其之后的内容
-      const parts = modelResponse.split('####');
-      if (parts.length < 2) {
-        console.error('大模型返回内容格式不正确: 未找到分隔符');
-        return { overall_score: 0, dimension_scores: {}, evaluation_reason: '解析错误', item_metadata: modelResponse };
+      // 去掉推理模型的 <think>...</think> 内容（包括被截断未闭合的情况）
+      const cleaned = modelResponse
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<think>[\s\S]*$/i, '')
+        .trim();
+
+      // 优先取 ```yaml / ```yml 代码块，取最后一个，避免思考过程中出现的代码块干扰
+      const fencedBlocks = [...cleaned.matchAll(/```(?:ya?ml)?[ \t]*\n?([\s\S]*?)```/gi)]
+        .map(m => m[1].trim())
+        .filter(block => /overall_score\s*:/.test(block));
+      let yamlContent = fencedBlocks.length > 0 ? fencedBlocks[fencedBlocks.length - 1] : '';
+
+      // 没有完整代码块时，取最后一个 #### 之后的内容（兼容缺少结尾```或未加代码块的情况）
+      if (!yamlContent) {
+        const parts = cleaned.split('####');
+        yamlContent = parts[parts.length - 1]
+          .replace(/```(?:ya?ml)?/gi, '')
+          .trim();
+        // 从 overall_score 开始截取，去掉前面残留的思考文字
+        const scoreIndex = yamlContent.search(/overall_score\s*:/);
+        if (scoreIndex >= 0) {
+          yamlContent = yamlContent.slice(scoreIndex);
+        }
       }
-      
-      // 获取YAML部分的文本
-      const yamlText = parts[1].trim();
-      
-      // 提取YAML内容 (去掉\```yaml和\```包装)
-      const yamlMatch = yamlText.match(/```yaml\s*([\s\S]*?)\s*```/);
-      if (!yamlMatch) {
-        console.error('大模型返回内容格式不正确: 未找到YAML代码块');
-        return { overall_score: 0, dimension_scores: {}, evaluation_reason: '解析错误', item_metadata: modelResponse };
+
+      if (!/overall_score\s*:/.test(yamlContent)) {
+        console.error('大模型返回内容格式不正确: 未找到 overall_score');
+        return { overall_score: 0, dimension_scores: {}, evaluation_reason: '解析错误: 未找到 overall_score', item_metadata: modelResponse };
       }
-      
-      const yamlContent = yamlMatch[1].trim();
-      
-      // 使用js-yaml库解析YAML内容
-      const parsedYaml = yaml.load(yamlContent) as any;
-      
+
+      // 使用js-yaml库解析YAML内容，失败时用正则兜底提取
+      let parsedYaml: any;
+      try {
+        parsedYaml = yaml.load(yamlContent);
+      } catch (yamlError) {
+        console.warn('YAML解析失败，使用正则兜底提取:', yamlError);
+        parsedYaml = this.extractByRegex(yamlContent);
+      }
+      if (!parsedYaml || typeof parsedYaml !== 'object' || parsedYaml.overall_score === undefined) {
+        parsedYaml = this.extractByRegex(yamlContent);
+      }
+
       const result = {
         overall_score: 0,
         dimension_scores: {},
@@ -101,7 +122,11 @@ export class AccuracyRequestService {
       
       // 提取总分
       if (parsedYaml.overall_score !== undefined) {
-        result.overall_score = Number(parsedYaml.overall_score);
+        const score = this.parseScore(parsedYaml.overall_score);
+        if (score === null) {
+          return { overall_score: 0, dimension_scores: {}, evaluation_reason: '解析错误: overall_score 不是数字', item_metadata: modelResponse };
+        }
+        result.overall_score = score;
       }
       
       // 提取维度评分 - 处理可能的数组格式
@@ -112,7 +137,8 @@ export class AccuracyRequestService {
             if (typeof item === 'object') {
               // 遍历对象中的每个属性
               for (const [dimension, score] of Object.entries(item)) {
-                result.dimension_scores[dimension] = Number(score);
+                const parsed = this.parseScore(score);
+                if (parsed !== null) result.dimension_scores[dimension] = parsed;
               }
             }
           }
@@ -120,7 +146,8 @@ export class AccuracyRequestService {
         // 如果维度评分是对象形式
         else if (typeof parsedYaml.dimension_scores === 'object') {
           for (const [dimension, score] of Object.entries(parsedYaml.dimension_scores)) {
-            result.dimension_scores[dimension] = Number(score);
+            const parsed = this.parseScore(score);
+            if (parsed !== null) result.dimension_scores[dimension] = parsed;
           }
         }
       }
@@ -145,6 +172,50 @@ export class AccuracyRequestService {
         item_metadata: modelResponse
       };
     }
+  }
+
+  /**
+   * 将分数值转换为数字，兼容 "1"、"[1]"、"1分" 等写法
+   *
+   * @param {any} value - 原始分数值
+   * @returns {number | null} 解析出的分数，无法解析时返回null
+   */
+  private parseScore(value: any): number | null {
+    if (Array.isArray(value)) value = value[0];
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    const match = String(value ?? '').match(/-?\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : null;
+  }
+
+  /**
+   * YAML解析失败时，用正则兜底提取总分、维度分和评估理由
+   *
+   * @param {string} text - YAML文本
+   * @returns {any} 与YAML解析结果结构一致的对象
+   */
+  private extractByRegex(text: string): any {
+    const result: any = { dimension_scores: {} };
+
+    const scoreMatch = text.match(/overall_score\s*:\s*\[?\s*(-?\d+(?:\.\d+)?)/);
+    if (scoreMatch) {
+      result.overall_score = Number(scoreMatch[1]);
+    }
+
+    // 维度分：取 dimension_scores 与 evaluation_reason 之间形如 "- 维度: 1" 或 "维度: 1" 的行
+    const dimSection = text.match(/dimension_scores\s*:([\s\S]*?)(?=evaluation_reason\s*:|$)/);
+    if (dimSection) {
+      const dimRegex = /^\s*-?\s*([^:\n]+?)\s*:\s*\[?\s*(-?\d+(?:\.\d+)?)/gm;
+      for (const m of dimSection[1].matchAll(dimRegex)) {
+        result.dimension_scores[m[1].trim()] = Number(m[2]);
+      }
+    }
+
+    const reasonMatch = text.match(/evaluation_reason\s*:\s*\|?\s*([\s\S]*)$/);
+    if (reasonMatch) {
+      result.evaluation_reason = reasonMatch[1].trim();
+    }
+
+    return result;
   }
 
   /**

@@ -211,6 +211,8 @@ async function executeWithBufferedQuestions(
       return !allQuestionsProcessed;
     };
 
+    const requestIntervalMs = Math.max(0, Number(test.batch_settings?.request_interval_ms) || 0);
+
     // 创建工作线程，每个线程负责处理多个问题
     const worker = async () => {
       // 只要应该继续测试，就保持工作
@@ -224,6 +226,11 @@ async function executeWithBufferedQuestions(
           if (question) {
             // 如果有问题，处理它
             await processQuestion(question);
+
+            // 每个工作线程两次请求之间的间隔，用于规避大模型接口限流
+            if (requestIntervalMs > 0 && shouldContinueTesting()) {
+              await new Promise(r => setTimeout(r, requestIntervalMs));
+            }
           } else if (!questionBuffer.hasMore()) {
             // 如果没有问题且没有更多数据可加载，标记完成
             allQuestionsProcessed = true;

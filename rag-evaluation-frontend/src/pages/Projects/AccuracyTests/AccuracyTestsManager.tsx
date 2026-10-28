@@ -26,6 +26,7 @@ interface AccuracyTestsManagerProps {
 
 // 本地存储的键名
 const CONCURRENCY_STORAGE_KEY = 'accuracy_test_concurrency';
+const REQUEST_INTERVAL_STORAGE_KEY = 'accuracy_test_request_interval_ms';
 
 export const AccuracyTestsManager: React.FC<AccuracyTestsManagerProps> = ({ projectId }) => {
   const [tests, setTests] = useState<any[]>([]);
@@ -40,6 +41,8 @@ export const AccuracyTestsManager: React.FC<AccuracyTestsManagerProps> = ({ proj
   const [datasets, setDatasets] = useState<any[]>([]);
   // 添加并发数设置状态
   const [concurrency, setConcurrency] = useState<number>(10);
+  // 请求间隔（毫秒）
+  const [requestIntervalMs, setRequestIntervalMs] = useState<number>(0);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [availableModels, setAvailableModels] = useState<ModelConfig[]>([]);
   const [isConfigured, setIsConfigured] = useState(false);
@@ -64,6 +67,10 @@ export const AccuracyTestsManager: React.FC<AccuracyTestsManagerProps> = ({ proj
     const savedConcurrency = localStorage.getItem(CONCURRENCY_STORAGE_KEY);
     if (savedConcurrency) {
       setConcurrency(parseInt(savedConcurrency, 10));
+    }
+    const savedInterval = localStorage.getItem(REQUEST_INTERVAL_STORAGE_KEY);
+    if (savedInterval) {
+      setRequestIntervalMs(parseInt(savedInterval, 10) || 0);
     }
 
     // 加载项目关联的数据集
@@ -97,6 +104,12 @@ export const AccuracyTestsManager: React.FC<AccuracyTestsManagerProps> = ({ proj
     setConcurrency(value);
     localStorage.setItem(CONCURRENCY_STORAGE_KEY, value.toString());
     message.success(`并发数已设置为 ${value}`);
+  };
+
+  const handleRequestIntervalChange = (value: number) => {
+    setRequestIntervalMs(value);
+    localStorage.setItem(REQUEST_INTERVAL_STORAGE_KEY, value.toString());
+    message.success(value > 0 ? `请求间隔已设置为 ${value / 1000} 秒` : '已取消请求间隔');
   };
 
   const fetchTests = async () => {
@@ -228,7 +241,8 @@ export const AccuracyTestsManager: React.FC<AccuracyTestsManagerProps> = ({ proj
         ...test,
         batch_settings: {
           ...test.batch_settings,
-          concurrency: concurrency
+          concurrency: concurrency,
+          request_interval_ms: requestIntervalMs
         }
       };
 
@@ -430,8 +444,23 @@ export const AccuracyTestsManager: React.FC<AccuracyTestsManagerProps> = ({ proj
             <Select.Option value={100}>100</Select.Option>
           </Select>
         </Form.Item>
+        <Form.Item label="请求间隔">
+          <Select
+            value={requestIntervalMs}
+            onChange={handleRequestIntervalChange}
+            style={{ width: 120 }}
+          >
+            <Select.Option value={0}>无</Select.Option>
+            <Select.Option value={500}>0.5 秒</Select.Option>
+            <Select.Option value={1000}>1 秒</Select.Option>
+            <Select.Option value={2000}>2 秒</Select.Option>
+            <Select.Option value={3000}>3 秒</Select.Option>
+            <Select.Option value={5000}>5 秒</Select.Option>
+            <Select.Option value={10000}>10 秒</Select.Option>
+          </Select>
+        </Form.Item>
         <Form.Item>
-          <Tooltip title="设置同时发送到大模型的并发请求数量，数值越大处理速度越快，但可能会增加API调用失败率">
+          <Tooltip title="并发请求数：同时发送到大模型的请求数量，数值越大越快，但可能增加API调用失败率。请求间隔：每个并发通道完成一次请求后等待的时间，用于规避接口限流">
             <Button type="link">并发说明</Button>
           </Tooltip>
         </Form.Item>
